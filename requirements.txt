@@ -1,6 +1,9 @@
-torch>=1.9.0
+# PyTorch must be installed separately — see README for the correct command.
+# torch, torchvision, torchaudio are NOT on PyPI for version 1.8.1.
+
 numpy>=1.20.0
 scipy>=1.7.0
-scikit-learn>=0.24.0
+scikit-learn==0.24.1
 networkx>=2.6.0
-tqdm>=4.62.0
+tqdm==4.59.0
+matplotlib==3.3.4
