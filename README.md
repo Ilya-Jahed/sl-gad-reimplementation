@@ -22,6 +22,8 @@ The two anomaly scores are fused at inference time, making SL-GAD robust to both
 ```
 sl-gad-reimplementation/
 ├── data/                  # .mat datasets (Cora, CiteSeer, BlogCatalog, …)
+├── docs/                  # Technical documentation
+│   └── dataset_pipeline.md
 ├── src/
 │   ├── __init__.py
 │   ├── dataset.py         # Data loading, normalization & RWR subgraph sampling
@@ -29,8 +31,8 @@ sl-gad-reimplementation/
 │   ├── trainer.py         # Training loop & loss computation
 │   └── evaluator.py       # AUC-ROC scoring & evaluation utilities
 ├── main.py                # Entry point – run the full pipeline
-├── test_dataset.py        # Smoke-test for src/dataset.py (see Testing section)
-├── requirements.txt       # Non-torch dependencies
+├── test_dataset.py        # Smoke-test for src/dataset.py
+├── requirements.txt       # Core dependencies
 └── README.md
 ```
 
@@ -65,11 +67,6 @@ pip install torch==1.8.1+cpu torchvision==0.9.1+cpu -f https://download.pytorch.
 pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
 ```
 
-**CUDA 10.2**
-```bash
-pip install torch==1.8.1+cu102 torchvision==0.9.1+cu102 -f https://download.pytorch.org/whl/torch_stable.html
-```
-
 ---
 
 ### Step 3 — Install DGL 0.4.1
@@ -84,11 +81,6 @@ pip install dgl==0.4.1
 **CUDA 11.1**
 ```bash
 pip install dgl-cu111==0.4.1
-```
-
-**CUDA 10.2**
-```bash
-pip install dgl-cu102==0.4.1
 ```
 
 ---
@@ -111,7 +103,7 @@ python -c "import torch, dgl; print('torch:', torch.__version__); print('dgl:', 
 
 ## 🧪 Testing
 
-[`test_dataset.py`](test_dataset.py) is a smoke-test that validates every function in `src/dataset.py` using a real `.mat` file from the `data/` folder. No synthetic data — it uses the actual datasets.
+[`test_dataset.py`](test_dataset.py) is a smoke-test that validates every function in `src/dataset.py` using a real `.mat` file from the `data/` folder.
 
 ```bash
 # Default: uses cora.mat (smallest, ~2 sec)
@@ -122,15 +114,7 @@ python test_dataset.py --dataset BlogCatalog
 python test_dataset.py --dataset ACM
 ```
 
-**What it tests:**
-
-| Step | Function |
-|---|---|
-| 1 | `load_mat` — shapes, splits, anomaly labels |
-| 2 | `normalize_adj` — symmetric D^{-1/2} A D^{-1/2} normalization |
-| 3 | `sparse_mx_to_torch_sparse_tensor` — scipy → torch sparse |
-| 4 | `adj_to_dgl_graph` — adjacency → DGL graph |
-| 5 | `generate_rwr_subgraph` — RWR subgraph sampling for all nodes |
+For detailed technical documentation on the dataset pipeline and testing strategy, see [`docs/dataset_pipeline.md`](docs/dataset_pipeline.md).
 
 ---
 
@@ -139,8 +123,6 @@ python test_dataset.py --dataset ACM
 ```bash
 python main.py --dataset cora --epochs 100 --lr 0.001
 ```
-
-> **Note:** Full CLI argument documentation will be added as `main.py` is implemented.
 
 ---
 
