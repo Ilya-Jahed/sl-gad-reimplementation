@@ -1,6 +1,7 @@
 # SL-GAD: Generative and Contrastive Self-Supervised Learning for Graph Anomaly Detection
 
-> A clean, modular reimplementation of the **SL-GAD** framework for unsupervised graph anomaly detection on attributed graphs.
+> A clean, modular reimplementation of the **SL-GAD** framework for unsupervised graph anomaly detection on attributed graphs.  
+> Based on: *IEEE Transactions on Knowledge and Data Engineering, 2021*
 
 ---
 
@@ -10,8 +11,8 @@ SL-GAD detects anomalies in attributed graphs by leveraging two parallel self-su
 
 | Module | Role |
 |---|---|
-| **Generative** | Reconstructs target-node attributes from its contextual subgraph |
-| **Contrastive** | Contrasts a target node's representation against its subgraph to detect structural anomalies |
+| **Generative** | Reconstructs target-node attributes from its contextual subgraph neighbours |
+| **Contrastive** | Contrasts a target node's embedding against its subgraph context to detect structural anomalies |
 
 The two anomaly scores are fused at inference time, making SL-GAD robust to both **attribute** and **structural** anomalies.
 
@@ -21,18 +22,22 @@ The two anomaly scores are fused at inference time, making SL-GAD robust to both
 
 ```
 sl-gad-reimplementation/
-├── data/                  # .mat datasets (Cora, CiteSeer, BlogCatalog, …)
-├── docs/                  # Technical documentation
-│   └── dataset_pipeline.md
+├── data/                        # .mat datasets (Cora, CiteSeer, BlogCatalog, …)
+├── checkpoints/                 # Saved model checkpoints (auto-created at training)
+├── docs/
+│   ├── dataset_pipeline.md      # src/dataset.py — data loading & RWR sampling
+│   ├── model_architecture.md    # src/model.py — GCN, Discriminator, readout
+│   └── training_pipeline.md     # src/trainer.py, evaluator.py, main.py
 ├── src/
 │   ├── __init__.py
-│   ├── dataset.py         # Data loading, normalization & RWR subgraph sampling
-│   ├── model.py           # Generative + Contrastive model architectures
-│   ├── trainer.py         # Training loop & loss computation
-│   └── evaluator.py       # AUC-ROC scoring & evaluation utilities
-├── main.py                # Entry point – run the full pipeline
-├── test_dataset.py        # Smoke-test for src/dataset.py
-├── requirements.txt       # Core dependencies
+│   ├── dataset.py               # Data loading, normalization & RWR subgraph sampling
+│   ├── model.py                 # GCN encoder/decoder, Discriminator, SL-GAD Model
+│   ├── trainer.py               # Batch construction, joint loss, early stopping
+│   └── evaluator.py             # Multi-round anomaly scoring & AUC evaluation
+├── main.py                      # CLI entry point — runs the full pipeline
+├── test_dataset.py              # Smoke-test for src/dataset.py
+├── test_model.py                # Smoke-test for src/model.py
+├── requirements.txt
 └── README.md
 ```
 
@@ -47,15 +52,14 @@ conda create -n slgad python=3.7 -y
 conda activate slgad
 ```
 
-> **Why Python 3.7?** The source code targets `torch==1.8.1` and `dgl==0.4.1`, both of which were built against Python 3.7.
+> **Why Python 3.7?** The source targets `torch==1.8.1` and `dgl==0.4.1`, both built against Python 3.7.
 
 ---
 
 ### Step 2 — Install PyTorch 1.8.1
 
-> ⚠️ **`torch==1.8.1` is NOT on PyPI.** PyTorch hosts its own wheel server, so a plain `pip install torch==1.8.1` will fail with *"No matching distribution found"*. You must use the `-f` flag below.
-
-> ⚠️ **Do NOT include `torchaudio` in this command.** `torchaudio==0.8.0` declares a hard dependency on `torch==1.8.0` (not `1.8.1`), causing an irresolvable conflict. This project does not use torchaudio.
+> ⚠️ **`torch==1.8.1` is NOT on PyPI.** You must use the `-f` flag below.  
+> ⚠️ **Do NOT include `torchaudio`** — it conflicts with `torch==1.8.1`.
 
 **CPU only (recommended for getting started)**
 ```bash
@@ -71,7 +75,7 @@ pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 -f https://download.pyto
 
 ### Step 3 — Install DGL 0.4.1
 
-> ⚠️ **Must match the source code exactly.** The RWR sampling in `dataset.py` uses `dgl.contrib.sampling.random_walk_with_restart`, which only exists in `dgl==0.4.1` and was removed in later versions.
+> ⚠️ **Must be exactly `0.4.1`**. The RWR sampling in `dataset.py` uses `dgl.contrib.sampling.random_walk_with_restart`, which was removed in later DGL versions.
 
 **CPU only**
 ```bash
@@ -101,36 +105,68 @@ python -c "import torch, dgl; print('torch:', torch.__version__); print('dgl:', 
 
 ---
 
-## 🧪 Testing
+## 🧪 Smoke Tests
 
-[`test_dataset.py`](test_dataset.py) is a smoke-test that validates every function in `src/dataset.py` using a real `.mat` file from the `data/` folder.
+| Test | What it validates |
+|---|---|
+| `python test_dataset.py` | All functions in `src/dataset.py` using a real `.mat` file |
+| `python test_model.py` | All model components using synthetic random tensors |
 
 ```bash
-# Default: uses cora.mat (smallest, ~2 sec)
+# Dataset test (default: cora.mat)
 python test_dataset.py
 
-# Test on other datasets
-python test_dataset.py --dataset BlogCatalog
-python test_dataset.py --dataset ACM
+# Model test
+python test_model.py
 ```
-
-For detailed technical documentation on the dataset pipeline and testing strategy, see [`docs/dataset_pipeline.md`](docs/dataset_pipeline.md).
 
 ---
 
 ## 🚀 Usage
 
+### Minimal run
+
 ```bash
-python main.py --dataset cora --epochs 100 --lr 0.001
+python main.py --expid 1 --dataset cora
 ```
+
+### Common examples
+
+```bash
+# BlogCatalog on GPU
+python main.py --expid 2 --dataset BlogCatalog --device cuda:0
+
+# 3 independent runs for statistical reliability
+python main.py --expid 3 --dataset ACM --runs 3
+
+# Contrastive score only (disable generative module at eval)
+python main.py --expid 4 --dataset cora --alpha 1.0 --beta 0.0
+
+# Faster eval for debugging (fewer inference rounds)
+python main.py --expid 5 --dataset cora --auc_test_rounds 10
+```
+
+### Key arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `--expid` | *(required)* | Experiment ID for checkpoint naming |
+| `--dataset` | `BlogCatalog` | Dataset name (must match `data/<name>.mat`) |
+| `--device` | `cuda:0` | Compute device; auto-falls back to CPU |
+| `--runs` | `1` | Number of independent training runs |
+| `--embedding_dim` | `64` | Hidden embedding dimension |
+| `--readout` | `avg` | Pooling: `avg`, `max`, `min`, `weighted_sum` |
+| `--alpha` | `1.0` | Contrastive loss/score weight |
+| `--beta` | `0.6` | Generative loss/score weight |
+| `--auc_test_rounds` | `256` | Inference rounds for stable AUC |
 
 ---
 
 ## 📊 Supported Datasets
 
-| Dataset | Nodes | Edges | Features | Anomalies |
+| Dataset | Nodes | Edges | Features | Anomaly Rate |
 |---|---|---|---|---|
-| Cora | 2,708 | 5,429 | 1,433 | 150 |
+| Cora | 2,708 | 5,429 | 1,433 | ~5.5% |
 | CiteSeer | 3,327 | 4,732 | 3,703 | — |
 | Pubmed | 19,717 | 44,338 | 500 | — |
 | BlogCatalog | 5,196 | 171,743 | 8,189 | ~5% |
@@ -141,7 +177,37 @@ Place `.mat` files in the `data/` directory before running.
 
 ---
 
-## 📖 Reference Paper
+## 📈 Verified Results
+
+| Dataset | This Implementation | Paper (SL-GAD) |
+|---|---|---|
+| Cora | **0.9167** | ~0.90–0.93 |
+
+---
+
+## 📖 Documentation
+
+| Document | Contents |
+|---|---|
+| [`docs/dataset_pipeline.md`](docs/dataset_pipeline.md) | `src/dataset.py` — data loading, adjacency normalization, RWR subgraph sampling |
+| [`docs/model_architecture.md`](docs/model_architecture.md) | `src/model.py` — GCN encoder/decoder, Discriminator with negative sampling, readout modes, subgraph expansion trick |
+| [`docs/training_pipeline.md`](docs/training_pipeline.md) | `src/trainer.py`, `src/evaluator.py`, `main.py` — batch construction, dual loss, multi-round AUC evaluation |
+
+---
+
+## ✅ Implementation Status
+
+- [x] `src/dataset.py` — data loading, normalization, RWR subgraph sampling
+- [x] `src/model.py` — GCN encoder/decoder, 4 readout modes, bilinear discriminator with cyclic negative sampling
+- [x] `src/trainer.py` — $K \to K+1$ subgraph expansion, joint BCE + MSE loss, early stopping
+- [x] `src/evaluator.py` — multi-round stochastic inference, MinMax score fusion, ROC-AUC
+- [x] `main.py` — full CLI pipeline
+- [x] `test_dataset.py` — dataset smoke test
+- [x] `test_model.py` — model architecture smoke test
+
+---
+
+## 📜 Reference
 
 ```bibtex
 @article{zheng2021generative,
@@ -152,16 +218,6 @@ Place `.mat` files in the `data/` directory before running.
   doi       = {10.1109/TKDE.2021.3119326}
 }
 ```
-
----
-
-## 🗺️ Implementation Roadmap
-
-- [x] `src/dataset.py` — data loading, anomaly injection, subgraph sampling
-- [ ] `src/model.py` — GNN encoder, generative decoder, contrastive projector
-- [ ] `src/trainer.py` — joint training loop with combined loss
-- [ ] `src/evaluator.py` — AUC-ROC / AUC-PR evaluation
-- [ ] `main.py` — CLI entry point
 
 ---
 

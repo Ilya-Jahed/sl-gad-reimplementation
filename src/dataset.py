@@ -52,6 +52,19 @@ def load_mat(dataset: str, train_rate: float = 0.3, val_rate: float = 0.1):
     return adj, feat, labels, idx_train, idx_val, idx_test, ano_labels, str_ano_labels, attr_ano_labels
 
 
+def preprocess_features(features):
+    """Row-normalize feature matrix and return dense representation.
+    
+    Forked from GRAND-Lab/CoLA (utils.py).
+    Returns the dense normalized matrix used as model input.
+    """
+    rowsum = np.array(features.sum(1))
+    r_inv = np.power(rowsum, -1).flatten()
+    r_inv[np.isinf(r_inv)] = 0.
+    r_mat_inv = sp.diags(r_inv)
+    features = r_mat_inv.dot(features)
+    return features.todense()
+
 def normalize_adj(adj):
     """Symmetrically normalize adjacency matrix. (A_hat = D^{-1/2} * A * D^{-1/2})"""
     adj = sp.coo_matrix(adj)
